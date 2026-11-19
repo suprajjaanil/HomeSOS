@@ -63,10 +63,11 @@ Hackathon_project/
 │   ├── tailwind.config.js          # Design system colors (Deep Navy, Teal, Warm Coral, Off-white)
 │   ├── postcss.config.js           # PostCSS configuration
 │   ├── package.json                # Frontend dependencies (React 19, Lucide, Confetti)
-│   └── tsconfig.app.json           # TypeScript configuration
+│   ├── tsconfig.app.json           # TypeScript configuration
+│   └── vite.config.ts              # Vite config with API reverse proxy to port 8000
 │
 ├── test_direct.py                  # End-to-end integration test suite
-├── start_all.bat                   # 1-Click launcher for Windows CMD
+├── start_all.bat                   # 1-Click launcher for Windows CMD / File Explorer
 ├── start_all.ps1                   # 1-Click launcher for PowerShell
 ├── start_backend.bat               # Backend-only launcher
 ├── start_frontend.bat              # Frontend-only launcher
@@ -76,50 +77,84 @@ Hackathon_project/
 
 ---
 
-## 🚀 3. QUICK START GUIDE
+## 💻 How to Run HomeSOS Locally
+
+Follow these step-by-step instructions to run HomeSOS locally on your computer.
 
 ### Prerequisites
-- **Python**: 3.10+ (tested on Python 3.14)
-- **Node.js**: v18+ (tested on Node.js v24)
-- **npm** or **pnpm**
+Before running the project, make sure the following tools are installed on your machine:
+- **Python**: Version 3.10 or higher (tested on Python 3.14)
+- **Node.js**: Version 18 or higher (tested on Node.js v24)
+- **npm**: Version 9 or higher (bundled automatically with Node.js)
+- **Git**: For version control and branch navigation
 
 ---
 
-### Option A: One-Click Startup (Recommended for Windows)
-
-Simply double-click:
-```bat
-start_all.bat
-```
-*(Or in PowerShell: `./start_all.ps1`)*
-
-This starts the backend on port `8000` and the frontend on port `5173`.
+### Step 1: Open the Project Folder in a Terminal
+1. Open **Windows PowerShell** or **Command Prompt** (cmd.exe).
+2. Navigate to the project root directory where HomeSOS is located:
+   ```powershell
+   cd C:\Users\JV\Hackathon_project
+   ```
+   *(Or the directory path where you have cloned/extracted the project repository).*
 
 ---
 
-### Option B: Manual Startup
+### Step 2: Run the Application Using `start_all.ps1`
+We provide an automated startup script `start_all.ps1` located directly in the project root. This script launches both the backend server and frontend development server in dedicated terminal processes:
 
-#### Step 1: Start Backend
-```bash
-# Navigate to project root
-cd Hackathon_project
-
-# Run backend launcher
-python backend/run.py
+```powershell
+.\start_all.ps1
 ```
-- Backend runs at: `http://localhost:8000`
-- Interactive Swagger API docs: `http://localhost:8000/docs`
-- Health check: `http://localhost:8000/api/health`
 
-#### Step 2: Start Frontend
-```bash
-# In a new terminal:
-cd Hackathon_project/frontend
+#### If PowerShell Blocks the Script (Execution Policy Restriction)
+On Windows, PowerShell may block executing `.ps1` script files by default, displaying an error message such as:
+> *File C:\Users\...\start_all.ps1 cannot be loaded because running scripts is disabled on this system.*
 
-# Launch Vite dev server
-npm run dev
+To temporarily bypass this restriction for your current terminal process only (without modifying permanent system-wide settings), run:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
-- Frontend runs at: `http://localhost:5173`
+
+Once that command finishes, run the startup script again:
+```powershell
+.\start_all.ps1
+```
+
+> **Alternative via File Explorer or Command Prompt**:
+> You can also double-click `start_all.bat` directly in Windows File Explorer, or execute `start_all.bat` from Command Prompt.
+
+---
+
+### Step 3: Open HomeSOS in Your Browser
+Once the startup script runs, open your browser (Google Chrome, Microsoft Edge, Firefox, or Brave) and navigate to:
+
+👉 **`http://localhost:5173`**
+
+*(Port `5173` is the frontend port configured in `frontend/vite.config.ts`, which automatically reverse-proxies all `/api` network requests to the backend server running on port `8000`).*
+
+> **⚠️ Important Notice About `localhost`:**
+> `http://localhost:5173` is a local loopback network address that refers specifically to the local computer running the application. **It only works on the computer running the application and is not a publicly accessible link.** It cannot be visited over the public internet by other people or remote devices unless an external tunnel (such as ngrok or cloudflare tunnel) is explicitly configured.
+
+---
+
+### Manual Multi-Terminal Startup (Optional)
+If you prefer to start each service individually in separate terminal windows:
+
+1. **Terminal 1 — Backend (FastAPI on Port `8000`)**:
+   ```cmd
+   cd C:\Users\JV\Hackathon_project
+   python backend\run.py
+   ```
+   - Health check: `http://localhost:8000/api/health`
+   - Interactive Swagger API docs: `http://localhost:8000/docs`
+
+2. **Terminal 2 — Frontend (React + Vite on Port `5173`)**:
+   ```cmd
+   cd C:\Users\JV\Hackathon_project\frontend
+   npm run dev
+   ```
+   - Application URL: `http://localhost:5173`
 
 ---
 
@@ -222,3 +257,34 @@ DATABASE_PATH=homesos.db
 - **Estimated Arrival Times**: ETAs factor in real distance calculations and typical Bengaluru road traffic multipliers (~3.5 mins/km), but live GPS tracking of workers is simulated.
 - **Pricing**: All price ranges are indicative estimates and subject to physical technician diagnostic inspection.
 - **Audio Processing**: If browser microphone permissions are blocked, a real-time text input fallback and audio file uploader are available.
+
+---
+
+## 🌿 9. VERSION HISTORY & GITHUB TRACKING
+
+HomeSOS is managed with Git version control. Version 1 (V1) and later versions can be viewed and explored through the repository's commit history, release tags, and branches:
+
+- **Viewing Commit History**:
+  To view the full chronological timeline of commits from the initial working baseline to current iterations, run:
+  ```bash
+  git log --oneline --graph --decorate
+  ```
+
+- **Exploring Version 1 (Initial Working Baseline)**:
+  Version 1 represents the initial working version of the HomeSOS voice-first dispatcher. You can inspect or checkout Version 1 directly via commit hash `37eb5f9`:
+  ```bash
+  git checkout 37eb5f9
+  ```
+
+- **Switching Between Branches**:
+  Different development tracks, upgrades (such as live Gemini AI integration), and milestones are organized into dedicated branches (e.g., `main`, `upgrade-ai-live`). You can list and switch between branches anytime:
+  ```bash
+  # List all local and remote branches
+  git branch -a
+
+  # Switch to a specific branch
+  git checkout <branch-name>
+  ```
+
+- **GitHub Web Interface**:
+  If this repository is hosted on GitHub, you can navigate across Version 1 and subsequent versions using the **Commits**, **Tags**, and **Branches** dropdowns in the GitHub web interface.
