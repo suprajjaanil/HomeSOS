@@ -1,7 +1,8 @@
 # HomeSOS 🚨
 > **"Speak your problem. Get the right help."**  
 > *A Voice-First AI Emergency & On-Demand Home-Service Dispatcher for Bengaluru, India.*  
-> **Participating in Hackathon — ECHO Track** (Voice input leading to actionable outcome).
+> **Participating in Hackathon — ECHO Track** (Voice input leading to actionable outcome).  
+> **Version: 2.0 (Enhanced Voice, Photo Diagnostics, Customer Auth & 9-Stage Tracking)**
 
 ---
 
@@ -12,8 +13,10 @@ When household disasters strike—a sudden pipe burst flooding the bathroom, a s
 **HomeSOS transforms this paradigm with a voice-first AI dispatcher:**
 - **Problem-first, not catalog-first**: The user simply speaks their distress in plain language (English, Hindi, or Kannada).
 - **Acoustic & Semantic AI Diagnosis**: Identifies the trade category, classifies urgency, detects hazards, provides immediate protective safety guidance, and generates a concise technical brief for the technician.
+- **Photo Upload & Cautious Visual Observation**: Capture damage via camera or file picker; HomeSOS attaches previews to the dispatch and produces a cautious initial visual description (explicitly noting that the on-site technician will perform the definitive physical inspection).
+- **Customer Account & Service Memory**: Secure authentication (PBKDF2-HMAC-SHA256 password hashing), customizable profile, and dedicated "My Activity" tracking linked to each customer.
 - **Smart Locality Matching**: Prioritizes nearby available professionals in Bengaluru (BTM Layout, Koramangala, Jayanagar, JP Nagar, Banashankari, Indiranagar, HSR) factoring in traffic-weighted arrival times and ratings.
-- **Instant Request, Acceptance & Live Simulation**: Simulates the full technician lifecycle from dispatch to job completion with digital invoicing and permanent service memory.
+- **9-Stage Persistent Lifecycle**: Simulates the full technician lifecycle from request creation to completion with digital invoicing and permanent service memory.
 
 ---
 
@@ -24,19 +27,23 @@ Hackathon_project/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py             # Backend package root
-│   │   ├── main.py                 # FastAPI app, CORS, lifespan DB init & seeding
-│   │   ├── database.py             # SQLite database engine & session manager
+│   │   ├── main.py                 # FastAPI app, static uploads mount, lifespan DB init & seeding
+│   │   ├── database.py             # SQLite database engine, schema migration & session manager
+│   │   ├── auth_util.py            # PBKDF2-HMAC-SHA256 password hashing & token signer
 │   │   ├── models.py               # Database schemas & row-to-dict converters
-│   │   ├── schemas.py              # Pydantic models for validation & requests
+│   │   ├── schemas.py              # Pydantic models for validation, auth, and requests
 │   │   ├── ai_service.py           # Gemini 2.5 Flash + Rule-based fallback engine
 │   │   ├── matching_service.py     # Bengaluru locality distance & traffic ETA engine
-│   │   ├── seed_data.py            # 16 demo Bengaluru professionals & 3 past service records
+│   │   ├── seed_data.py            # 16 demo Bengaluru professionals & seed customer records
 │   │   └── routes/
 │   │       ├── __init__.py         # Routes package
+│   │       ├── auth.py             # POST /api/auth/register, /login, GET /me, PUT /profile
+│   │       ├── uploads.py          # POST /api/uploads/image (photo storage & visual note)
 │   │       ├── ai.py               # POST /api/ai/analyze, POST /api/ai/upload-audio, GET /api/ai/scenarios
 │   │       ├── professionals.py    # GET /api/professionals, GET /api/professionals/match
 │   │       ├── requests.py         # POST /api/requests, PATCH /status, POST /simulate-step
-│   │       └── history.py          # GET /api/history, GET /api/history/stats
+│   │       └── history.py          # GET /api/history, GET /api/history/stats (customer-filtered)
+│   ├── uploads/                    # Persisted customer damage photos
 │   ├── run.py                      # Standalone backend server launcher
 │   ├── requirements.txt            # Python dependencies
 │   ├── .env                        # Local environment variables (with GEMINI_API_KEY)
@@ -46,15 +53,17 @@ Hackathon_project/
 │   ├── public/                     # Static assets & icons
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Navbar.tsx           # Navigation, locality selector, live health pill
-│   │   │   ├── VoiceRecorder.tsx    # Feature 1: Animated mic, waveform meter, audio upload & text fallback
+│   │   │   ├── Navbar.tsx           # Navigation, user avatar pill, Bengaluru locality selector
+│   │   │   ├── VoiceRecorder.tsx    # Feature 1: Speech recognition (EN/HI/KN), audio meter & PhotoUpload
+│   │   │   ├── PhotoUpload.tsx      # Feature 2: Camera capture, file upload, previews & visual observation
+│   │   │   ├── AuthModal.tsx        # Feature 5: Login, registration, profile editing & 1-click demo login
 │   │   │   ├── DemoScenariosBar.tsx # 5 one-click hackathon judge demo situations
-│   │   │   ├── AIAnalysisCard.tsx   # Feature 2: Problem synthesis, urgency pill, safety alert, brief
+│   │   │   ├── AIAnalysisCard.tsx   # Feature 2: Problem synthesis, urgency, safety alert, brief, photo previews
 │   │   │   ├── MatchingSection.tsx  # Feature 3: Technician cards + Bengaluru radar locality visualizer
-│   │   │   ├── TrackingView.tsx     # Feature 4: 7-stage timeline, technician hero card, call & simulation
-│   │   │   └── DashboardView.tsx    # Feature 5: Customer profile, metrics, service memory & history drawer
+│   │   │   ├── TrackingView.tsx     # Feature 4: 9-stage timeline, technician hero card, photos & simulator
+│   │   │   └── DashboardView.tsx    # Feature 5: Customer profile, metrics, filtered history & modal details
 │   │   ├── services/
-│   │   │   └── api.ts              # API client wrapper for FastAPI backend
+│   │   │   └── api.ts              # API client wrapper with JWT token & image upload support
 │   │   ├── types.ts                # TypeScript interfaces for all payloads & models
 │   │   ├── App.tsx                 # Core reactive application orchestrator
 │   │   ├── index.css               # Tailwind CSS directives & custom keyframes
@@ -66,7 +75,7 @@ Hackathon_project/
 │   ├── tsconfig.app.json           # TypeScript configuration
 │   └── vite.config.ts              # Vite config with API reverse proxy to port 8000
 │
-├── test_direct.py                  # End-to-end integration test suite
+├── test_direct.py                  # End-to-end integration test suite (9 test suites)
 ├── start_all.bat                   # 1-Click launcher for Windows CMD / File Explorer
 ├── start_all.ps1                   # 1-Click launcher for PowerShell
 ├── start_backend.bat               # Backend-only launcher
@@ -175,46 +184,47 @@ DATABASE_PATH=homesos.db
 
 ---
 
-## 🌟 5. CORE FEATURES IMPLEMENTATION
+## 🌟 5. CORE FEATURES IMPLEMENTATION (VERSION 2)
 
 ### Feature 1: Voice-First AI Problem Reporting
-- **Large Pulsing Microphone**: Centered interactive recording button with expanding ripple rings.
-- **Real-Time Soundwave Meter**: Live waveform indicators reflecting audio input.
-- **Recording Timer & Controls**: Live duration counter with Stop & Analyze controls.
-- **Audio File Upload**: Direct support for `.wav`, `.mp3`, `.m4a`, and `.webm` files.
-- **Text Fallback**: Full keyboard input for quiet environments.
-- **Multilingual Support**: Supports English, Hindi (हिंदी), and Kannada (ಕನ್ನಡ).
-- **Clear Error Handling**: Graceful fallback if microphone access is denied.
+- **Live Web Speech Transcription**: Real-time speech-to-text recognition in English (`en-IN`), Hindi (`hi-IN`), and Kannada (`kn-IN`).
+- **MediaRecorder Audio Capture**: In-browser microphone audio recording with dynamic soundwave meter.
+- **Recording Timer & Visual Ripple**: Concentric expanding rings and live duration counter with Stop & Analyze controls.
+- **Audio File Upload & Fallback**: Support for `.wav`, `.mp3`, `.m4a`, and `.webm` files, plus direct text prompt input.
+- **Editable AI Review**: Customer can inspect and edit the recognized problem description, locality, or category prior to dispatch.
 
-### Feature 2: AI Problem Diagnosis & Urgency Detection
-- **Structured JSON Extraction**: Powered by Gemini 2.5 Flash with fallback to domain-specific NLP rules.
-- **Urgency Classification**:
-  - `Emergency` (active leaks, electrical sparks, locked out, fire hazard).
-  - `Urgent` (AC down in heat, dysfunctional toilet flush).
-  - `Routine` (cosmetic woodwork, touchup painting).
-- **Inhabitant Safety Guidance**: Explicit, actionable guidance (e.g., *"Shut main quarter-turn isolation valve"* or *"Flip main MCB switch OFF; do not touch metal appliances"*).
-- **Concise Technician Brief**: Operational summary transmitted to the technician (tools needed, symptoms, customer address).
-- **Interactive Clarification**: Automatically asks follow-up questions if vital details are missing.
+### Feature 2: Photo Upload & Multimodal Visual Observation
+- **Camera Capture & File Picker**: Directly capture photos from a mobile/laptop camera (`capture="environment"`) or select from gallery.
+- **Thumbnail Gallery & Retake/Remove**: View uploaded photos, replace, or remove with single-click actions.
+- **Cautious AI Visual Description**: Generates preliminary visual observations (e.g., active water pooling, scorched switch plate, dislodged roller track) using Gemini multimodal or heuristic rules.
+- **Explicit Physical Diagnostic Disclaimer**: The interface explicitly highlights that visual notes are preliminary observations and the technician will conduct the definitive on-site physical inspection.
+- **Persistent Storage**: Uploaded damage photos are saved in `backend/uploads/` and linked permanently to the booking.
 
-### Feature 3: Smart Nearby Professional Matching
-- **Bengaluru Locality Proximity**: Accurate distance calculations using GPS coordinates for BTM Layout, Koramangala, Jayanagar, JP Nagar, Banashankari, HSR Layout, and Indiranagar.
-- **Traffic-Weighted Arrival Times**: Multiplies distance by average Bengaluru road speeds (~3.5 mins/km) + technician response buffer.
-- **16 Realistic Demo Professionals**: ITI-certified master plumbers, grade-A wiremen, HVAC technicians, locksmiths, and carpenters with real avatars, skills, ratings, and phone numbers.
-- **Bengaluru Locality Radar**: Visual map display showing the customer pin and nearby technicians with real-time distance rings.
+### Feature 3: Smart Nearby Professional Matching & Bengaluru Radar
+- **Locality Proximity Calculation**: Accurate geospatial distance calculations centered on South Bengaluru localities (BTM Layout, Koramangala, Jayanagar, JP Nagar, Banashankari, HSR Layout, Indiranagar).
+- **Traffic-Weighted Arrival Times**: Factors in realistic peak Bengaluru traffic multipliers (~3.5 mins/km) + technician dispatch readiness.
+- **16 Realistic Demo Professionals**: Seeded master plumbers, electricians, AC technicians, locksmiths, and carpenters with ratings, completed jobs, and verified badges.
+- **Bengaluru Proximity Radar**: Visual radar showing customer coordinates and relative technician pins.
+- **Clear Demo Disclaimers**: Explicit notices indicating that technician profiles and radar coordinates represent realistic prototype seed data without live GPS telematics.
 
-### Feature 4: Instant Request, Acceptance & Tracking
-- **7-Stage Workflow**:
-  `REQUESTED` → `SEARCHING` → `ACCEPTED` → `ON_THE_WAY` → `ARRIVED` → `IN_PROGRESS` → `COMPLETED`
-- **Assigned Technician Card**: Photo, verified badge, rating, direct phone simulation, and tools carried.
-- **Hackathon Demo Accelerator**: "Advance Next Stage" button lets judges experience the complete request lifecycle in seconds.
-- **Celebration Confetti & Receipt**: Fires confetti when completed and displays a finalized service receipt.
-- **Cancellation**: Customers can safely cancel requests before arrival.
+### Feature 4: 9-Stage Persistent Request Lifecycle
+- **Canonical 9-Stage Pipeline**:
+  `REQUEST_CREATED` → `AI_ANALYSED` → `MATCHED` → `ASSIGNED` → `ACCEPTED` → `ON_THE_WAY` → `ARRIVED` → `IN_PROGRESS` → `COMPLETED` (+ `CANCELLED`).
+- **Real-Time Audit Trail**: Chronological event timeline recording exact timestamps and stage changes in SQLite.
+- **Assigned Specialist Hero Card**: Specialist photo, rating, verified badge, tools carried, and simulated phone call modal.
+- **Hackathon Demo Accelerator**: One-click "Advance Next Stage" button for rapid evaluation of all lifecycle phases.
+- **Celebration Confetti & Invoice**: Interactive celebration and digital invoice settlement on completion.
 
-### Feature 5: Service Memory & Transparent Estimates
-- **Persistent Database**: All requests and status updates are saved to SQLite (`homesos.db`).
-- **Customer Dashboard**: Displays key metrics (Total Requests, Completed, Emergency Dispatches, Saved Technicians, Total Spent).
-- **Service History Drawer**: Detailed audit trail of past jobs, parts replaced, technician notes, and settlement receipts.
-- **Indicative Price Estimates**: Clear price ranges (e.g., `₹350 - ₹750`) explicitly labeled as indicative and subject to technician on-site inspection.
+### Feature 5: Customer Account & "My Activity" Dashboard
+- **Secure Authentication**: Customer registration, login, and session token authentication using PBKDF2-HMAC-SHA256 password hashing.
+- **Customer Profile**: Customizable name, phone, email, and Bengaluru residential address.
+- **1-Click Demo Login**: Pre-configured demo login as *Priya Sharma* (`priya@example.com` / `password123`) with existing service history.
+- **Filtered History View**: Toggle between *All Requests*, *Active / In Progress*, and *Completed*.
+- **Permanent Service Memory**: Full audit trail of past household repairs, attached damage photos, technician briefs, and final paid receipts.
+
+### Feature 6: Polished Emergency-Responsive UI/UX
+- **Design System**: Warm off-white canvas (`#F7F9FC`), deep navy text and surfaces (`#14233B`), emerald/teal trust accents, and restrained emergency coral/red alerts.
+- **Responsive & Accessible**: Optimized for mobile and desktop screens with seamless transitions and accessible touch targets.
 
 ---
 

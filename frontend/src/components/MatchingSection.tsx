@@ -77,6 +77,18 @@ export const MatchingSection: React.FC<MatchingSectionProps> = ({
         </div>
       </div>
 
+      {/* Demo Data & Transparency Banner */}
+      <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 flex items-center justify-between text-xs text-amber-900">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-[10px] uppercase">
+            Prototype Demo Notice
+          </span>
+          <span className="text-slate-600">
+            Professional profiles, ratings, and arrival times are realistic seeded demo data for Bengaluru localities. The radar visualizer demonstrates spatial dispatch logic without live mobile GPS telematics.
+          </span>
+        </div>
+      </div>
+
       {/* Grid: Technician Cards & Bengaluru Locality Visualizer */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         

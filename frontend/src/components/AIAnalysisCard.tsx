@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { 
   Sparkles, AlertOctagon, AlertTriangle, Info, MapPin, 
   Clock, ShieldAlert, CheckCircle, Edit2, ArrowRight, 
-  HelpCircle, Copy, Check 
+  HelpCircle, Copy, Check, Camera, Image as ImageIcon 
 } from 'lucide-react';
 import { AIAnalyzeResponse } from '../types';
 
 interface AIAnalysisCardProps {
   analysis: AIAnalyzeResponse;
+  attachedImages?: string[];
+  visualDescription?: string | null;
   onConfirm: (updatedAnalysis: AIAnalyzeResponse) => void;
   onCancel: () => void;
   isLoadingMatches: boolean;
@@ -15,11 +17,16 @@ interface AIAnalysisCardProps {
 
 export const AIAnalysisCard: React.FC<AIAnalysisCardProps> = ({
   analysis,
+  attachedImages = [],
+  visualDescription,
   onConfirm,
   onCancel,
   isLoadingMatches,
 }) => {
-  const [data, setData] = useState<AIAnalyzeResponse>(analysis);
+  const [data, setData] = useState<AIAnalyzeResponse>({
+    ...analysis,
+    visual_description: visualDescription || analysis.visual_description,
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [clarificationAnswer, setClarificationAnswer] = useState('');
@@ -236,6 +243,53 @@ export const AIAnalysisCard: React.FC<AIAnalysisCardProps> = ({
             </div>
           )}
         </div>
+
+        {/* Attached Photos & Cautious AI Visual Observation */}
+        {attachedImages.length > 0 && (
+          <div className="bg-teal-50/60 border border-teal-200 rounded-2xl p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Camera className="w-4 h-4 text-teal-700" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-teal-900">
+                Attached Problem Photos ({attachedImages.length})
+              </h4>
+            </div>
+
+            <div className="flex flex-wrap gap-3 mb-3">
+              {attachedImages.map((imgUrl, i) => (
+                <a
+                  key={i}
+                  href={imgUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group relative block w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden border border-teal-300 shadow-sm"
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`Problem Attachment ${i + 1}`}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
+                  <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1 rounded font-mono">
+                    #{i + 1}
+                  </span>
+                </a>
+              ))}
+            </div>
+
+            {(data.visual_description || visualDescription) && (
+              <div className="bg-white/90 border border-teal-200 rounded-xl p-3 text-xs text-navy-900">
+                <span className="font-bold text-teal-800 uppercase text-[10px] tracking-wider block mb-1">
+                  Preliminary Visual Observation (AI Assistance)
+                </span>
+                <p className="text-slate-700 font-medium">
+                  "{data.visual_description || visualDescription}"
+                </p>
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  ℹ️ Cautious initial observation based on uploaded photo; on-site technician will perform the definitive physical inspection.
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Clarification Follow-up Question if any detail was missing */}
         {data.clarification_question && !clarificationSubmitted && (

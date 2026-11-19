@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Square, Upload, Send, AlertTriangle, Globe, Volume2, Sparkles, CheckCircle2 } from 'lucide-react';
+import { 
+  Mic, Square, Upload, Send, AlertTriangle, 
+  Globe, Volume2, Sparkles, Camera, CheckCircle2 
+} from 'lucide-react';
+import { PhotoUpload } from './PhotoUpload';
 
 interface VoiceRecorderProps {
-  onAnalyzeText: (text: string, language: string) => void;
-  onAnalyzeAudio: (audioBlob: Blob, language: string) => void;
+  onAnalyzeText: (text: string, language: string, attachedImages?: string[], visualDesc?: string) => void;
+  onAnalyzeAudio: (audioBlob: Blob, language: string, attachedImages?: string[], visualDesc?: string) => void;
   isLoading: boolean;
   selectedLocality: string;
 }
@@ -18,8 +22,14 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi' | 'kn'>('en');
   const [textInput, setTextInput] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [speechApiSupported, setSpeechApiSupported] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState(20);
+
+  // Photos attached to this SOS problem report
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  const [visualDescription, setVisualDescription] = useState<string | undefined>(undefined);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -27,9 +37,20 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const speechRecognizerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Quick suggestion chips
+  // Check browser SpeechRecognition support
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        setSpeechApiSupported(true);
+      }
+    }
+  }, []);
+
   const QUICK_EXAMPLES = [
     { label: "🚰 Pipe Burst in Bathroom", text: `Bathroom pipe burst suddenly and water is spreading fast across the floor in ${selectedLocality}. Need plumber immediately.` },
     { label: "⚡ Sparking Switch & Power Tripped", text: `Sparking switchboard in the living room with burning plastic smell, main MCB tripped in ${selectedLocality}. Please send emergency electrician.` },
@@ -53,7 +74,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     };
   }, [isRecording]);
 
-  // Audio level visualizer loop
   const updateAudioMeter = () => {
     if (analyserRef.current && isRecording) {
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
@@ -70,19 +90,57 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
   const startRecording = async () => {
     setErrorMessage(null);
+    setLiveTranscript('');
     audioChunksRef.current = [];
 
+    const langCodeMap = {
+      en: 'en-IN',
+      hi: 'hi-IN',
+      kn: 'kn-IN',
+    };
+
+    // 1. Initialize Browser Speech Recognition (Web Speech API) if available
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRec) {
+      try {
+        const recognizer = new SpeechRec();
+        recognizer.continuous = true;
+        recognizer.interimResults = true;
+        recognizer.lang = langCodeMap[selectedLanguage];
+
+        recognizer.onresult = (event: any) => {
+          let current = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            current += event.results[i][0].transcript;
+          }
+          if (current.trim()) {
+            setLiveTranscript(current.trim());
+            setTextInput(current.trim());
+          }
+        };
+
+        recognizer.onerror = (e: any) => {
+          console.warn("Speech recognition notice:", e.error);
+        };
+
+        recognizer.start();
+        speechRecognizerRef.current = recognizer;
+      } catch (err) {
+        console.warn("Speech recognition initialization notice:", err);
+      }
+    }
+
+    // 2. Initialize MediaStream & Web Audio Analyzer
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setErrorMessage("Voice recording is not supported in this browser. Please use text input or upload an audio file.");
+      setErrorMessage("Voice recording is not supported in this browser. Please use text input or upload an audio note.");
       return;
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // Setup Web Audio API Analyzer
       try {
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         audioContextRef.current = new AudioCtx();
         const source = audioContextRef.current.createMediaStreamSource(stream);
         analyserRef.current = audioContextRef.current.createAnalyser();
@@ -90,7 +148,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         source.connect(analyserRef.current);
         animFrameRef.current = requestAnimationFrame(updateAudioMeter);
       } catch (err) {
-        console.warn("Audio meter context init warning:", err);
+        console.warn("Audio meter context notice:", err);
       }
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
@@ -105,17 +163,21 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
       recorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        if (audioChunksRef.current.length > 0 && recordingDuration >= 1) {
-          onAnalyzeAudio(audioBlob, selectedLanguage);
+        
+        const finalRecordedText = liveTranscript.trim() || textInput.trim();
+        if (finalRecordedText && finalRecordedText.length >= 6) {
+          onAnalyzeText(finalRecordedText, selectedLanguage, attachedImages, visualDescription);
+        } else if (audioChunksRef.current.length > 0 && recordingDuration >= 1) {
+          onAnalyzeAudio(audioBlob, selectedLanguage, attachedImages, visualDescription);
         } else {
-          // If recording was under 1 second or silent, provide fallback text
           onAnalyzeText(
-            `Bathroom pipe burst and water leaking in ${selectedLocality}. Need plumber immediately.`,
-            selectedLanguage
+            `Bathroom pipe burst suddenly and water is spreading in ${selectedLocality}. Need plumber immediately.`,
+            selectedLanguage,
+            attachedImages,
+            visualDescription
           );
         }
 
-        // Clean up tracks
         stream.getTracks().forEach((track) => track.stop());
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
           audioContextRef.current.close().catch(() => {});
@@ -127,12 +189,21 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       setIsRecording(true);
     } catch (err) {
       console.error("Microphone access error:", err);
-      setErrorMessage("Microphone access was denied or unavailable. You can use the text input or select one of the demo prompts below.");
+      setErrorMessage("Microphone access was denied or unavailable. Please use text input or select one of the demo prompts below.");
       setIsRecording(false);
+      if (speechRecognizerRef.current) {
+        try { speechRecognizerRef.current.stop(); } catch {}
+      }
     }
   };
 
   const stopRecording = () => {
+    if (speechRecognizerRef.current) {
+      try {
+        speechRecognizerRef.current.stop();
+      } catch {}
+      speechRecognizerRef.current = null;
+    }
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -142,14 +213,14 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      onAnalyzeAudio(file, selectedLanguage);
+      onAnalyzeAudio(file, selectedLanguage, attachedImages, visualDescription);
     }
   };
 
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!textInput.trim()) return;
-    onAnalyzeText(textInput.trim(), selectedLanguage);
+    onAnalyzeText(textInput.trim(), selectedLanguage, attachedImages, visualDescription);
   };
 
   const formatTime = (secs: number) => {
@@ -161,7 +232,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   return (
     <div className="relative bg-gradient-to-b from-[#14233B] to-[#1A2E4C] rounded-3xl p-6 sm:p-10 text-white shadow-2xl border border-navy-700 overflow-hidden mb-10">
       
-      {/* Background ambient decorative glow */}
+      {/* Decorative ambient glows */}
       <div className="absolute top-0 right-1/4 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-coral-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -203,26 +274,33 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           </div>
         </div>
 
-        <div className="text-xs text-teal-300 bg-teal-950/70 border border-teal-800/80 px-3 py-1 rounded-full flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
-          Dispatching in: <strong className="text-white font-bold">{selectedLocality}</strong>
+        <div className="flex items-center gap-2">
+          {speechApiSupported && (
+            <span className="text-[10px] bg-teal-950 text-teal-300 border border-teal-700/80 px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
+              <Sparkles className="w-3 h-3 text-teal-400" />
+              Live Speech-to-Text Active
+            </span>
+          )}
+          <div className="text-xs text-teal-300 bg-teal-950/70 border border-teal-800/80 px-3 py-1 rounded-full flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+            Dispatching in: <strong className="text-white font-bold">{selectedLocality}</strong>
+          </div>
         </div>
       </div>
 
       {/* Hero Headline */}
-      <div className="text-center max-w-2xl mx-auto mb-8 relative z-10">
+      <div className="text-center max-w-2xl mx-auto mb-6 relative z-10">
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white mb-3">
           Something broken at home?
         </h1>
-        <p className="text-base sm:text-lg text-slate-300 font-medium">
-          Speak your problem. HomeSOS AI understands your issue, assesses safety risks, and dispatches the right verified technician in minutes.
+        <p className="text-sm sm:text-base text-slate-300 font-medium">
+          Speak your problem. HomeSOS AI diagnoses your trade, assesses safety hazards, and dispatches the right nearby professional in minutes.
         </p>
       </div>
 
       {/* Main Microphone Interaction Circle */}
-      <div className="flex flex-col items-center justify-center my-6 relative z-10">
+      <div className="flex flex-col items-center justify-center my-4 relative z-10">
         
-        {/* Ripple rings when recording */}
         {isRecording && (
           <>
             <div 
@@ -236,12 +314,11 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           </>
         )}
 
-        {/* Big Mic Button */}
         <button
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
           disabled={isLoading}
-          aria-label={isRecording ? "Stop recording" : "Start speaking your problem"}
+          aria-label={isRecording ? "Stop recording and submit" : "Start speaking your problem"}
           className={`relative group w-28 h-28 sm:w-32 sm:h-32 rounded-full flex items-center justify-center shadow-2xl transition-all transform ${
             isRecording
               ? 'bg-gradient-to-tr from-coral-600 to-coral-500 text-white scale-105 shadow-coral-500/50'
@@ -255,8 +332,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           )}
         </button>
 
-        {/* Status / Recording Duration Indicator */}
-        <div className="mt-5 text-center">
+        {/* Live Audio / Transcript State */}
+        <div className="mt-4 text-center max-w-lg mx-auto">
           {isRecording ? (
             <div className="flex flex-col items-center gap-1.5">
               <div className="flex items-center gap-2 bg-coral-950/80 border border-coral-700/60 text-coral-300 px-4 py-1.5 rounded-full text-sm font-semibold">
@@ -264,8 +341,15 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 Listening... {formatTime(recordingDuration)}
               </div>
 
-              {/* Dynamic waveform visualizer */}
-              <div className="flex items-center justify-center gap-1 h-8 mt-2">
+              {/* Real-time transcribed text display */}
+              {liveTranscript && (
+                <div className="mt-2 bg-navy-900/90 border border-teal-500/40 text-teal-200 px-4 py-2 rounded-xl text-xs font-mono shadow">
+                  "{liveTranscript}"
+                </div>
+              )}
+
+              {/* Dynamic waveform */}
+              <div className="flex items-center justify-center gap-1 h-7 mt-2">
                 <span className="w-1 bg-coral-400 rounded-full wave-bar-1" />
                 <span className="w-1 bg-coral-400 rounded-full wave-bar-2" />
                 <span className="w-1 bg-coral-300 rounded-full wave-bar-3" />
@@ -275,7 +359,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 <span className="w-1 bg-coral-400 rounded-full wave-bar-1" />
               </div>
               <p className="text-xs text-slate-300">
-                Click red button when done to analyze and match help
+                Tap square button when done to analyze and match help
               </p>
             </div>
           ) : (
@@ -285,7 +369,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 Tap microphone & explain what happened
               </p>
               <p className="text-xs text-slate-400 mt-0.5">
-                (e.g., "My kitchen tap is leaking water all over the floor in BTM...")
+                (e.g., "My bathroom pipe is leaking and water is spreading in {selectedLocality}...")
               </p>
             </div>
           )}
@@ -293,7 +377,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
       </div>
 
-      {/* Error message if mic unavailable */}
       {errorMessage && (
         <div className="max-w-xl mx-auto my-3 bg-amber-950/80 border border-amber-600/60 text-amber-200 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -301,10 +384,20 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         </div>
       )}
 
-      {/* Audio File Upload + Text Fallback Options */}
-      <div className="max-w-2xl mx-auto mt-6 pt-6 border-t border-navy-700/80 relative z-10">
-        
-        {/* Text fallback input */}
+      {/* Embedded Photo Upload Area */}
+      <div className="max-w-2xl mx-auto mt-4 relative z-10">
+        <PhotoUpload
+          attachedImages={attachedImages}
+          onImagesChange={(imgs, visDesc) => {
+            setAttachedImages(imgs);
+            if (visDesc) setVisualDescription(visDesc);
+          }}
+          isLoading={isLoading}
+        />
+      </div>
+
+      {/* Text Fallback & Audio Upload Area */}
+      <div className="max-w-2xl mx-auto mt-6 pt-5 border-t border-navy-700/80 relative z-10">
         <form onSubmit={handleTextSubmit} className="flex gap-2">
           <input
             type="text"
@@ -320,11 +413,10 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             className="bg-teal-500 hover:bg-teal-400 text-navy-900 font-bold px-4 py-2.5 rounded-xl text-sm flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow"
           >
             <Send className="w-4 h-4" />
-            <span className="hidden sm:inline">Analyze</span>
+            <span className="hidden sm:inline">Diagnose</span>
           </button>
         </form>
 
-        {/* Audio File Upload Button */}
         <div className="flex items-center justify-between mt-3 text-xs text-slate-400">
           <button
             type="button"
@@ -332,7 +424,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             className="hover:text-teal-300 flex items-center gap-1.5 transition-colors font-medium"
           >
             <Upload className="w-3.5 h-3.5 text-teal-400" />
-            <span>Upload voice note / audio file (.wav, .mp3, .webm)</span>
+            <span>Upload voice recording file (.wav, .mp3, .webm)</span>
           </button>
           <input
             ref={fileInputRef}
@@ -342,13 +434,12 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             className="hidden"
           />
           <span className="text-slate-400 text-[11px] hidden sm:inline">
-            🔒 Voice input processed securely
+            🔒 Voice & photos encrypted securely
           </span>
         </div>
-
       </div>
 
-      {/* Quick Example Voice Distresses */}
+      {/* Quick Example Scenarios */}
       <div className="max-w-3xl mx-auto mt-6 relative z-10">
         <p className="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-2">
           Or test with common household distress situations:
@@ -358,7 +449,10 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             <button
               key={i}
               type="button"
-              onClick={() => onAnalyzeText(ex.text, selectedLanguage)}
+              onClick={() => {
+                setTextInput(ex.text);
+                onAnalyzeText(ex.text, selectedLanguage, attachedImages, visualDescription);
+              }}
               disabled={isLoading || isRecording}
               className="text-xs bg-navy-800/80 hover:bg-navy-700 text-slate-200 hover:text-white px-3 py-1.5 rounded-lg border border-navy-600 transition-all text-left flex items-center gap-1 disabled:opacity-50"
             >

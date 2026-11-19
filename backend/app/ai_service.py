@@ -104,6 +104,7 @@ def analyze_with_rule_engine(text: str, location_hint: Optional[str] = None) -> 
         if scenario["sample_input"].lower() in t_lower or t_lower in scenario["sample_input"].lower():
             res = dict(scenario)
             res["problem_description"] = scenario.get("problem_description", scenario.get("sample_input", text))
+            res["visual_description"] = scenario.get("visual_description", None)
             res["is_demo_fallback"] = True
             res["ai_confidence"] = 0.98
             return res
@@ -207,6 +208,7 @@ def analyze_with_rule_engine(text: str, location_hint: Optional[str] = None) -> 
         "clarification_question": clarification_question,
         "technician_briefing": technician_briefing,
         "indicative_price_range": price_map.get(category, "₹350 - ₹750"),
+        "visual_description": None,
         "is_demo_fallback": True,
         "ai_confidence": 0.88
     }

@@ -20,13 +20,17 @@ import {
 import { 
   DashboardView 
 } from './components/DashboardView';
+import { 
+  AuthModal 
+} from './components/AuthModal';
 import { api } from './services/api';
 import { 
   AIAnalyzeResponse, 
   MatchedProfessional, 
   ServiceRequest, 
   PresetScenario, 
-  HistoryStats 
+  HistoryStats,
+  User 
 } from './types';
 import { Sparkles, Shield, PhoneCall, CheckCircle2, Clock } from 'lucide-react';
 
@@ -34,10 +38,16 @@ export function App() {
   const [currentTab, setCurrentTab] = useState<'report' | 'matching' | 'tracking' | 'dashboard'>('report');
   const [selectedLocality, setSelectedLocality] = useState<string>('BTM Layout');
   
+  // User Authentication State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
   // AI and Flow State
   const [analysisResult, setAnalysisResult] = useState<AIAnalyzeResponse | null>(null);
   const [matchedProfessionals, setMatchedProfessionals] = useState<MatchedProfessional[]>([]);
   const [activeRequest, setActiveRequest] = useState<ServiceRequest | null>(null);
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  const [visualDescription, setVisualDescription] = useState<string | null>(null);
   
   // Data State
   const [presetScenarios, setPresetScenarios] = useState<PresetScenario[]>([]);
@@ -53,6 +63,20 @@ export function App() {
   // Initialize data on load
   useEffect(() => {
     async function initData() {
+      // 1. Try restoring logged in user
+      try {
+        const user = await api.getMe();
+        if (user) {
+          setCurrentUser(user);
+          if (user.locality) {
+            setSelectedLocality(user.locality);
+          }
+        }
+      } catch (e) {
+        console.warn("Auth check fallback:", e);
+      }
+
+      // 2. Health check
       try {
         const health = await api.getHealth();
         setAiEngineStatus(health.ai_engine || 'Rule Engine Demo');
@@ -60,6 +84,7 @@ export function App() {
         console.warn("Backend health check fallback:", e);
       }
 
+      // 3. Scenarios
       try {
         const scenarios = await api.getScenarios();
         setPresetScenarios(scenarios);
@@ -72,11 +97,11 @@ export function App() {
     initData();
   }, []);
 
-  const loadHistory = async () => {
+  const loadHistory = async (overrideCustomerId?: string) => {
     try {
-      const hist = await api.getHistory();
+      const hist = await api.getHistory(overrideCustomerId || currentUser?.id);
       setHistoryList(hist);
-      const st = await api.getHistoryStats();
+      const st = await api.getHistoryStats(overrideCustomerId || currentUser?.id);
       setHistoryStats(st);
       
       // Auto-detect active in-flight request if present
@@ -90,11 +115,21 @@ export function App() {
   };
 
   // Handler: Analyze Text
-  const handleAnalyzeText = async (text: string, language: string) => {
+  const handleAnalyzeText = async (
+    text: string, 
+    language: string, 
+    images: string[] = [], 
+    visualDesc?: string
+  ) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setAttachedImages(images);
+    setVisualDescription(visualDesc || null);
     try {
       const result = await api.analyzeProblem(text, language, selectedLocality);
+      if (visualDesc && !result.visual_description) {
+        result.visual_description = visualDesc;
+      }
       setAnalysisResult(result);
       if (result.customer_location) {
         setSelectedLocality(result.customer_location);
@@ -108,11 +143,21 @@ export function App() {
   };
 
   // Handler: Analyze Uploaded Audio
-  const handleAnalyzeAudio = async (blob: Blob, language: string) => {
+  const handleAnalyzeAudio = async (
+    blob: Blob, 
+    language: string, 
+    images: string[] = [], 
+    visualDesc?: string
+  ) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setAttachedImages(images);
+    setVisualDescription(visualDesc || null);
     try {
       const result = await api.uploadAudio(blob, language, selectedLocality);
+      if (visualDesc && !result.visual_description) {
+        result.visual_description = visualDesc;
+      }
       setAnalysisResult(result);
       if (result.customer_location) {
         setSelectedLocality(result.customer_location);
@@ -135,6 +180,7 @@ export function App() {
   const handleConfirmAnalysis = async (confirmed: AIAnalyzeResponse) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setAnalysisResult(confirmed);
     try {
       const matches = await api.matchProfessionals(
         confirmed.category,
@@ -158,8 +204,13 @@ export function App() {
     setIsLoading(true);
     setErrorMessage(null);
 
+    const customerName = currentUser?.name || 'Priya Sharma';
+    const customerPhone = currentUser?.phone || '+91 98765 43210';
+    const customerId = currentUser?.id;
+
     try {
       const newReq = await api.createRequest({
+        customer_id: customerId,
         problem_description: analysisResult.problem_description,
         category: analysisResult.category,
         urgency: analysisResult.urgency,
@@ -167,14 +218,16 @@ export function App() {
         safety_concerns: analysisResult.safety_concerns,
         immediate_guidance: analysisResult.immediate_guidance,
         customer_location: analysisResult.customer_location,
-        customer_name: 'Priya Sharma',
-        customer_phone: '+91 98765 43210',
+        customer_name: customerName,
+        customer_phone: customerPhone,
         preferred_time: analysisResult.preferred_time,
         estimated_complexity: analysisResult.estimated_complexity,
         technician_briefing: analysisResult.technician_briefing,
         assigned_professional_id: prof.id,
         price_estimate_min: Math.max(300, prof.response_time_min * 20),
         price_estimate_max: Math.max(700, prof.response_time_min * 45),
+        images: attachedImages,
+        image_analysis: visualDescription || analysisResult.visual_description,
       });
 
       setActiveRequest(newReq);
@@ -220,6 +273,8 @@ export function App() {
   const handleNewRequest = () => {
     setAnalysisResult(null);
     setMatchedProfessionals([]);
+    setAttachedImages([]);
+    setVisualDescription(null);
     setCurrentTab('report');
   };
 
@@ -234,6 +289,8 @@ export function App() {
         setSelectedLocality={setSelectedLocality}
         activeRequestId={activeRequest && activeRequest.status !== 'COMPLETED' ? activeRequest.id : null}
         aiEngineStatus={aiEngineStatus}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -266,14 +323,20 @@ export function App() {
             {analysisResult ? (
               <AIAnalysisCard
                 analysis={analysisResult}
+                attachedImages={attachedImages}
+                visualDescription={visualDescription}
                 onConfirm={handleConfirmAnalysis}
-                onCancel={() => setAnalysisResult(null)}
+                onCancel={() => {
+                  setAnalysisResult(null);
+                  setAttachedImages([]);
+                  setVisualDescription(null);
+                }}
                 isLoadingMatches={isLoading}
               />
             ) : (
               <VoiceRecorder
-                onAnalyzeText={(txt, lang) => handleAnalyzeText(txt, lang)}
-                onAnalyzeAudio={(blob, lang) => handleAnalyzeAudio(blob, lang)}
+                onAnalyzeText={(txt, lang, imgs, desc) => handleAnalyzeText(txt, lang, imgs, desc)}
+                onAnalyzeAudio={(blob, lang, imgs, desc) => handleAnalyzeAudio(blob, lang, imgs, desc)}
                 isLoading={isLoading}
                 selectedLocality={selectedLocality}
               />
@@ -352,6 +415,8 @@ export function App() {
           <DashboardView
             stats={historyStats}
             history={historyList}
+            currentUser={currentUser}
+            onOpenAuth={() => setIsAuthModalOpen(true)}
             onSelectRequest={(req) => {
               setActiveRequest(req);
               setCurrentTab('tracking');
@@ -378,6 +443,20 @@ export function App() {
           </div>
         </div>
       </footer>
+
+      {/* Customer Account & Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        onUserChange={(user) => {
+          setCurrentUser(user);
+          loadHistory(user?.id);
+          if (user?.locality) {
+            setSelectedLocality(user.locality);
+          }
+        }}
+      />
 
     </div>
   );

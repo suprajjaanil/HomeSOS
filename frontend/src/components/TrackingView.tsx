@@ -15,14 +15,22 @@ interface TrackingViewProps {
 }
 
 const STAGES = [
-  { key: 'REQUESTED', label: 'Request Sent', desc: 'Dispatched to HomeSOS AI' },
-  { key: 'SEARCHING', label: 'Searching Pros', desc: 'Pinging nearest verified technicians' },
-  { key: 'ACCEPTED', label: 'Pro Accepted', desc: 'Technician confirmed dispatch' },
-  { key: 'ON_THE_WAY', label: 'On The Way', desc: 'En route in Bengaluru traffic' },
-  { key: 'ARRIVED', label: 'Arrived', desc: 'Technician at customer location' },
-  { key: 'IN_PROGRESS', label: 'Work In Progress', desc: 'Repairing & parts fitting' },
-  { key: 'COMPLETED', label: 'Completed', desc: 'Quality verified & bill settled' },
+  { key: 'REQUEST_CREATED', label: 'Created', desc: 'Saved in database' },
+  { key: 'AI_ANALYSED', label: 'AI Analysed', desc: 'Urgency structured' },
+  { key: 'MATCHED', label: 'Matched', desc: 'Nearby pros ranked' },
+  { key: 'ASSIGNED', label: 'Assigned', desc: 'Technician dispatched' },
+  { key: 'ACCEPTED', label: 'Accepted', desc: 'Confirmed by pro' },
+  { key: 'ON_THE_WAY', label: 'On The Way', desc: 'En route in traffic' },
+  { key: 'ARRIVED', label: 'Arrived', desc: 'At doorstep' },
+  { key: 'IN_PROGRESS', label: 'In Progress', desc: 'Repairing & fitting' },
+  { key: 'COMPLETED', label: 'Completed', desc: 'Resolved & settled' },
 ];
+
+const normalizeStatus = (status: string) => {
+  if (status === 'REQUESTED') return 'REQUEST_CREATED';
+  if (status === 'SEARCHING') return 'MATCHED';
+  return status;
+};
 
 export const TrackingView: React.FC<TrackingViewProps> = ({
   request,
@@ -33,7 +41,8 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
 }) => {
   const [showCallModal, setShowCallModal] = useState(false);
 
-  const currentIdx = STAGES.findIndex((s) => s.key === request.status);
+  const normalizedStatus = normalizeStatus(request.status);
+  const currentIdx = STAGES.findIndex((s) => s.key === normalizedStatus);
   const isCancelled = request.status === 'CANCELLED';
   const isCompleted = request.status === 'COMPLETED';
 
@@ -120,7 +129,7 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
             />
 
             {/* Stages Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-7 gap-4 relative z-10">
+            <div className="grid grid-cols-3 sm:grid-cols-9 gap-2 relative z-10">
               {STAGES.map((stage, idx) => {
                 const isPassed = !isCancelled && currentIdx >= idx;
                 const isCurrent = !isCancelled && currentIdx === idx;
@@ -128,7 +137,7 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                 return (
                   <div key={stage.key} className="flex flex-col items-center text-center">
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-sm ${
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-[11px] sm:text-xs transition-all shadow-sm ${
                         isCurrent
                           ? 'bg-coral-500 text-white ring-4 ring-coral-200 scale-110'
                           : isPassed
@@ -137,18 +146,18 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                       }`}
                     >
                       {isPassed && !isCurrent ? (
-                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                       ) : (
                         idx + 1
                       )}
                     </div>
                     
-                    <span className={`text-[11px] font-bold mt-2 ${
+                    <span className={`text-[10px] sm:text-[11px] font-bold mt-1.5 leading-tight ${
                       isCurrent ? 'text-coral-600' : isPassed ? 'text-navy-900' : 'text-slate-400'
                     }`}>
                       {stage.label}
                     </span>
-                    <span className="text-[9px] text-slate-400 hidden sm:block line-clamp-1">
+                    <span className="text-[9px] text-slate-400 hidden md:block line-clamp-1">
                       {stage.desc}
                     </span>
                   </div>
@@ -165,11 +174,14 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
               <Sparkles className="w-4 h-4" />
             </span>
             <div>
-              <h4 className="text-xs font-bold text-navy-800">
-                Hackathon Simulation Accelerator
+              <h4 className="text-xs font-bold text-navy-800 flex items-center gap-2">
+                <span>Hackathon Simulation Accelerator</span>
+                <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                  Demo Progression
+                </span>
               </h4>
               <p className="text-[11px] text-slate-500">
-                Simulate professional acceptance, arrival, and completion without waiting:
+                Simulate realistic dispatch lifecycle events (Accepted → On the Way → Arrived → In Progress → Completed):
               </p>
             </div>
           </div>
@@ -183,7 +195,7 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
                 className="flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-extrabold text-navy-900 bg-teal-400 hover:bg-teal-300 transition-all flex items-center justify-center gap-1.5 shadow"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Advance Next Stage</span>
+                <span>Advance Next Stage (Simulated)</span>
               </button>
             )}
 
@@ -325,6 +337,34 @@ export const TrackingView: React.FC<TrackingViewProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Attached Problem Images */}
+          {request.images && request.images.length > 0 && (
+            <div className="pt-3 border-t border-slate-100">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                Customer Problem Photos ({request.images.length}):
+              </span>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {request.images.map((img, i) => (
+                  <a
+                    key={i}
+                    href={img}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:scale-105 transition-transform"
+                  >
+                    <img src={img} alt="Problem Photo" className="w-full h-full object-cover" />
+                  </a>
+                ))}
+              </div>
+              {request.image_analysis && (
+                <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <strong className="text-navy-900 font-bold block mb-0.5">Visual AI Note:</strong>
+                  {request.image_analysis}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Live Event Audit Log */}

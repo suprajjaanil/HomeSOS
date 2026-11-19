@@ -20,6 +20,8 @@ def analyze_endpoint(payload: AIAnalyzeRequest):
         language=payload.language or "auto",
         location_hint=payload.location_hint
     )
+    if payload.image_url and not result.get("visual_description"):
+        result["visual_description"] = "Photo evidence attached for technician on-site verification."
     return result
 
 @router.get("/scenarios")

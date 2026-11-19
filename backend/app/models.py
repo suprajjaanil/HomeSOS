@@ -1,7 +1,20 @@
 import json
 from typing import Dict, Any, Optional
 
-def row_to_professional_dict(row) -> Dict[str, Any]:
+def row_to_user_dict(row) -> Optional[Dict[str, Any]]:
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "email": row["email"],
+        "phone": row["phone"],
+        "locality": row["locality"],
+        "address": row["address"],
+        "created_at": str(row["created_at"]) if "created_at" in row.keys() else None
+    }
+
+def row_to_professional_dict(row) -> Optional[Dict[str, Any]]:
     if not row:
         return None
     
@@ -31,7 +44,7 @@ def row_to_professional_dict(row) -> Dict[str, Any]:
         "created_at": str(row["created_at"]) if "created_at" in row.keys() else None
     }
 
-def row_to_request_dict(row, assigned_prof: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def row_to_request_dict(row, assigned_prof: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     if not row:
         return None
 
@@ -47,8 +60,20 @@ def row_to_request_dict(row, assigned_prof: Optional[Dict[str, Any]] = None) -> 
     except Exception:
         timeline = []
 
+    # Version 2: Images support
+    images = []
+    if "images" in row.keys() and row["images"]:
+        try:
+            images = json.loads(row["images"]) if isinstance(row["images"], str) else row["images"]
+        except Exception:
+            images = [row["images"]]
+
+    image_analysis = row["image_analysis"] if "image_analysis" in row.keys() else None
+    customer_id = row["customer_id"] if "customer_id" in row.keys() else "user-demo"
+
     return {
         "id": row["id"],
+        "customer_id": customer_id,
         "problem_description": row["problem_description"],
         "raw_transcript": row["raw_transcript"],
         "category": row["category"],
@@ -70,6 +95,8 @@ def row_to_request_dict(row, assigned_prof: Optional[Dict[str, Any]] = None) -> 
         "final_amount": int(row["final_amount"]) if row["final_amount"] is not None else None,
         "timeline": timeline,
         "notes": row["notes"],
+        "images": images,
+        "image_analysis": image_analysis,
         "created_at": str(row["created_at"]) if "created_at" in row.keys() else None,
         "updated_at": str(row["updated_at"]) if "updated_at" in row.keys() else None
     }

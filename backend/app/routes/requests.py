@@ -9,15 +9,28 @@ from ..schemas import ServiceRequestCreate, ServiceRequestStatusUpdate, ServiceR
 
 router = APIRouter(prefix="/api/requests", tags=["Service Requests"])
 
+# Version 2 Canonical Lifecycle Statuses
 STATUS_FLOW = [
-    "REQUESTED",
-    "SEARCHING",
+    "REQUEST_CREATED",
+    "AI_ANALYSED",
+    "MATCHED",
+    "ASSIGNED",
     "ACCEPTED",
     "ON_THE_WAY",
     "ARRIVED",
     "IN_PROGRESS",
     "COMPLETED"
 ]
+
+# Legacy normalization mapping
+STATUS_ALIASES = {
+    "REQUESTED": "REQUEST_CREATED",
+    "SEARCHING": "MATCHED",
+}
+
+def normalize_status(status: str) -> str:
+    s = status.upper().strip()
+    return STATUS_ALIASES.get(s, s)
 
 def _fetch_request_with_prof(cursor, req_id: str):
     cursor.execute("SELECT * FROM service_requests WHERE id = ?", (req_id,))
@@ -42,28 +55,32 @@ def create_service_request(payload: ServiceRequestCreate):
     iso_now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     initial_timeline = [
-        {"time": now_str, "event": f"Voice/text request submitted by {payload.customer_name}"},
-        {"time": now_str, "event": f"AI identified {payload.category} ({payload.urgency})"}
+        {"time": now_str, "event": f"Request Created: Spoken/typed problem submitted by {payload.customer_name}"},
+        {"time": now_str, "event": f"AI Analysed: Diagnosed as {payload.category} ({payload.urgency} urgency)"}
     ]
 
-    initial_status = "REQUESTED"
+    initial_status = "REQUEST_CREATED"
     if payload.assigned_professional_id:
-        initial_status = "ACCEPTED"
-        initial_timeline.append({"time": now_str, "event": f"Technician selected: {payload.assigned_professional_id}"})
+        initial_status = "ASSIGNED"
+        initial_timeline.append({"time": now_str, "event": f"Assigned to provider ID: {payload.assigned_professional_id}"})
+
+    customer_id = payload.customer_id or "user-demo"
+    images_json = json.dumps(payload.images or [])
 
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
         INSERT INTO service_requests (
-            id, problem_description, raw_transcript, category, urgency,
+            id, customer_id, problem_description, raw_transcript, category, urgency,
             symptoms, safety_concerns, immediate_guidance, customer_location,
             customer_name, customer_phone, preferred_time, estimated_complexity,
             technician_briefing, assigned_professional_id, status,
             price_estimate_min, price_estimate_max, timeline, notes,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            images, image_analysis, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             req_id,
+            customer_id,
             payload.problem_description,
             payload.raw_transcript,
             payload.category,
@@ -83,6 +100,8 @@ def create_service_request(payload: ServiceRequestCreate):
             payload.price_estimate_max or 750,
             json.dumps(initial_timeline),
             payload.notes,
+            images_json,
+            payload.image_analysis,
             iso_now,
             iso_now
         ))
@@ -90,13 +109,23 @@ def create_service_request(payload: ServiceRequestCreate):
         return _fetch_request_with_prof(cursor, req_id)
 
 @router.get("", response_model=List[ServiceRequestResponse])
-def list_service_requests(status: Optional[str] = Query(None, description="Filter by status")):
+def list_service_requests(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    customer_id: Optional[str] = Query(None, description="Filter by customer account ID")
+):
     with get_db() as conn:
         cursor = conn.cursor()
+        query = "SELECT id FROM service_requests WHERE 1=1"
+        params = []
         if status:
-            cursor.execute("SELECT id FROM service_requests WHERE status = ? ORDER BY created_at DESC", (status.upper(),))
-        else:
-            cursor.execute("SELECT id FROM service_requests ORDER BY created_at DESC")
+            query += " AND (status = ? OR status = ?)"
+            params.extend([status.upper(), normalize_status(status)])
+        if customer_id:
+            query += " AND customer_id = ?"
+            params.append(customer_id)
+        query += " ORDER BY created_at DESC"
+        
+        cursor.execute(query, tuple(params))
         req_ids = [r["id"] for r in cursor.fetchall()]
         return [_fetch_request_with_prof(cursor, r_id) for r_id in req_ids]
 
@@ -118,7 +147,7 @@ def update_request_status(request_id: str, payload: ServiceRequestStatusUpdate):
         if not req_row:
             raise HTTPException(status_code=404, detail="Service request not found")
 
-        new_status = payload.status.upper()
+        new_status = normalize_status(payload.status)
         now_str = datetime.now(timezone.utc).strftime("%I:%M %p")
         iso_now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -129,13 +158,16 @@ def update_request_status(request_id: str, payload: ServiceRequestStatusUpdate):
             timeline = []
 
         status_events = {
-            "SEARCHING": "AI Dispatcher pinging nearby available technicians",
-            "ACCEPTED": "Technician confirmed service request dispatch",
-            "ON_THE_WAY": "Technician has departed and is en route via Bengaluru transit",
-            "ARRIVED": "Technician arrived at customer premises with diagnostic kit",
-            "IN_PROGRESS": "Work in progress: Inspection, parts fitting & diagnostics",
-            "COMPLETED": "Service completed successfully. Quality check verified.",
-            "CANCELLED": "Request cancelled by customer before technician arrival."
+            "REQUEST_CREATED": "Request created and registered in HomeSOS queue",
+            "AI_ANALYSED": "AI Analysed: Problem classified and technician brief generated",
+            "MATCHED": "Professionals Matched: Proximity engine identified suitable nearby technicians",
+            "ASSIGNED": "Assigned: Technician assigned to booking",
+            "ACCEPTED": "Accepted: [Simulated] Technician confirmed availability and dispatch",
+            "ON_THE_WAY": "On The Way: [Simulated] Technician departed in transit across Bengaluru",
+            "ARRIVED": "Arrived: [Simulated] Technician reached customer premises with equipment",
+            "IN_PROGRESS": "Work in Progress: Active inspection, diagnostics and repair",
+            "COMPLETED": "Completed: Service verified, test passed, and bill finalized",
+            "CANCELLED": "Cancelled: Request cancelled before technician arrival"
         }
         event_desc = status_events.get(new_status, f"Status updated to {new_status}")
         if payload.notes:
@@ -143,7 +175,6 @@ def update_request_status(request_id: str, payload: ServiceRequestStatusUpdate):
 
         timeline.append({"time": now_str, "event": event_desc})
 
-        # Calculate final amount
         final_amt = req_row["final_amount"]
         if payload.final_amount is not None:
             final_amt = payload.final_amount
@@ -165,8 +196,8 @@ def update_request_status(request_id: str, payload: ServiceRequestStatusUpdate):
 @router.post("/{request_id}/simulate-step", response_model=ServiceRequestResponse)
 def simulate_next_step(request_id: str):
     """
-    Demo simulation helper: Steps through the workflow:
-    REQUESTED -> SEARCHING -> ACCEPTED -> ON_THE_WAY -> ARRIVED -> IN_PROGRESS -> COMPLETED
+    Demo simulation helper: Steps through the full 9-stage lifecycle:
+    REQUEST_CREATED -> AI_ANALYSED -> MATCHED -> ASSIGNED -> ACCEPTED -> ON_THE_WAY -> ARRIVED -> IN_PROGRESS -> COMPLETED
     """
     with get_db() as conn:
         cursor = conn.cursor()
@@ -175,10 +206,11 @@ def simulate_next_step(request_id: str):
         if not req:
             raise HTTPException(status_code=404, detail="Service request not found")
 
-        if req["status"] == "CANCELLED":
+        current_status = normalize_status(req["status"])
+        if current_status == "CANCELLED":
             raise HTTPException(status_code=400, detail="Cannot advance a cancelled request")
 
-        if req["status"] == "COMPLETED":
+        if current_status == "COMPLETED":
             return _fetch_request_with_prof(cursor, request_id)
 
         assigned_prof_id = req["assigned_professional_id"]
@@ -192,7 +224,7 @@ def simulate_next_step(request_id: str):
                 assigned_prof_id = p_row["id"]
 
         try:
-            current_idx = STATUS_FLOW.index(req["status"])
+            current_idx = STATUS_FLOW.index(current_status)
             next_status = STATUS_FLOW[min(current_idx + 1, len(STATUS_FLOW) - 1)]
         except ValueError:
             next_status = "ACCEPTED"

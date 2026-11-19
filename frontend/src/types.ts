@@ -1,3 +1,25 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  locality: string;
+  address?: string | null;
+  created_at?: string | null;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
+export interface ImageUploadResponse {
+  image_url: string;
+  filename: string;
+  visual_description?: string | null;
+  is_ai_analyzed: boolean;
+}
+
 export interface AIAnalyzeResponse {
   problem_description: string;
   category: string;
@@ -12,6 +34,7 @@ export interface AIAnalyzeResponse {
   clarification_question: string | null;
   technician_briefing: string;
   indicative_price_range: string;
+  visual_description?: string | null;
   is_demo_fallback: boolean;
   ai_confidence: number;
 }
@@ -44,8 +67,23 @@ export interface TimelineEvent {
   event: string;
 }
 
+export type RequestStatus =
+  | 'REQUEST_CREATED'
+  | 'AI_ANALYSED'
+  | 'MATCHED'
+  | 'ASSIGNED'
+  | 'ACCEPTED'
+  | 'ON_THE_WAY'
+  | 'ARRIVED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'REQUESTED'
+  | 'SEARCHING';
+
 export interface ServiceRequest {
   id: string;
+  customer_id?: string;
   problem_description: string;
   raw_transcript?: string;
   category: string;
@@ -61,11 +99,13 @@ export interface ServiceRequest {
   technician_briefing: string;
   assigned_professional_id?: string | null;
   assigned_professional?: MatchedProfessional | null;
-  status: 'REQUESTED' | 'SEARCHING' | 'ACCEPTED' | 'ON_THE_WAY' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  status: RequestStatus;
   price_estimate_min: number;
   price_estimate_max: number;
   final_amount?: number | null;
   timeline: TimelineEvent[];
+  images?: string[];
+  image_analysis?: string | null;
   notes?: string | null;
   created_at?: string;
   updated_at?: string;

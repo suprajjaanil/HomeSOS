@@ -1,5 +1,6 @@
 import React from 'react';
-import { ShieldAlert, Radio, Clock, User, Sparkles } from 'lucide-react';
+import { ShieldAlert, Radio, Clock, User as UserIcon, Sparkles, LogIn } from 'lucide-react';
+import { User } from '../types';
 
 interface NavbarProps {
   currentTab: 'report' | 'tracking' | 'dashboard';
@@ -8,6 +9,8 @@ interface NavbarProps {
   setSelectedLocality: (loc: string) => void;
   activeRequestId: string | null;
   aiEngineStatus: string;
+  currentUser?: User | null;
+  onOpenAuth?: () => void;
 }
 
 const LOCALITIES = [
@@ -27,6 +30,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setSelectedLocality,
   activeRequestId,
   aiEngineStatus,
+  currentUser,
+  onOpenAuth,
 }) => {
   return (
     <header className="sticky top-0 z-50 bg-[#14233B] text-white shadow-md border-b border-navy-700">
@@ -109,9 +114,34 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-slate-200 hover:text-white hover:bg-navy-700'
               }`}
             >
-              <User className="w-4 h-4" />
+              <UserIcon className="w-4 h-4" />
               <span className="hidden sm:inline">My Activity</span>
             </button>
+
+            {/* User Account / Auth Modal Trigger */}
+            {onOpenAuth && (
+              <button
+                onClick={onOpenAuth}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-navy-800 hover:bg-navy-700 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+                title="Customer Account"
+              >
+                {currentUser ? (
+                  <>
+                    <span className="w-5 h-5 rounded-full bg-teal-500 text-navy-900 font-bold flex items-center justify-center text-[10px]">
+                      {currentUser.name.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="hidden md:inline font-bold text-white max-w-[90px] truncate">
+                      {currentUser.name.split(' ')[0]}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Login / Demo</span>
+                  </>
+                )}
+              </button>
+            )}
 
             {/* AI Status Pill */}
             <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-navy-900/90 border border-teal-500/30 text-teal-300">

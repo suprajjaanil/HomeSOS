@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { 
-  User, CheckCircle, Clock, ShieldAlert, Wrench, 
-  IndianRupee, ChevronRight, FileText, ArrowRight, Eye, Calendar
+  User as UserIcon, CheckCircle, Clock, ShieldAlert, Wrench, 
+  IndianRupee, ChevronRight, FileText, ArrowRight, Eye, Calendar,
+  Camera, LogIn, Filter
 } from 'lucide-react';
-import { ServiceRequest, HistoryStats } from '../types';
+import { ServiceRequest, HistoryStats, User } from '../types';
 
 interface DashboardViewProps {
   stats: HistoryStats | null;
   history: ServiceRequest[];
   onSelectRequest: (req: ServiceRequest) => void;
   onNewRequest: () => void;
+  currentUser?: User | null;
+  onOpenAuth?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -17,8 +20,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   history,
   onSelectRequest,
   onNewRequest,
+  currentUser,
+  onOpenAuth,
 }) => {
   const [selectedModalRequest, setSelectedModalRequest] = useState<ServiceRequest | null>(null);
+  const [filterMode, setFilterMode] = useState<'all' | 'active' | 'completed'>('all');
+
+  const filteredHistory = history.filter((req) => {
+    if (filterMode === 'active') return req.status !== 'COMPLETED' && req.status !== 'CANCELLED';
+    if (filterMode === 'completed') return req.status === 'COMPLETED';
+    return true;
+  });
+
+  const userName = currentUser?.name || 'Priya Sharma (Demo)';
+  const userInitials = (currentUser?.name || 'Priya Sharma')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+  const userLocality = currentUser?.locality || 'BTM Layout';
+  const userAddress = currentUser?.address || 'BTM Layout 2nd Stage, Bengaluru';
+  const userPhone = currentUser?.phone || '+91 98765 43210';
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 mb-16">
@@ -27,20 +50,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-teal-500 to-teal-400 flex items-center justify-center text-navy-900 font-extrabold text-2xl shadow-md">
-            PS
+            {userInitials}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-extrabold text-navy-900">
-                Priya Sharma
+                {userName}
               </h1>
               <span className="text-[11px] font-bold bg-teal-100 text-teal-800 px-2.5 py-0.5 rounded-full">
-                HomeSOS Priority Resident
+                {currentUser ? 'Verified Customer' : 'Demo Account'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              📍 Primary Residence: <strong>BTM Layout 2nd Stage, Bengaluru</strong> • +91 98765 43210
+              📍 Residence: <strong>{userAddress}</strong> • {userPhone}
             </p>
+            {onOpenAuth && (
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="text-xs text-teal-700 hover:text-teal-900 font-bold underline mt-1 block"
+              >
+                {currentUser ? 'Manage Profile / Switch Account' : 'Sign In / Register Account'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -113,7 +145,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Service Memory & Past History Section */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-lg overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-base sm:text-lg font-extrabold text-navy-900">
               Service Memory & History
@@ -122,18 +154,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Permanent record of household repairs, symptoms, parts, and costs
             </p>
           </div>
-          <span className="text-xs font-semibold text-slate-400">
-            {history.length} Records
-          </span>
+          
+          {/* Status Filter Buttons */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              className={`px-3 py-1 rounded-lg transition-all ${
+                filterMode === 'all' ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-600 hover:text-navy-900'
+              }`}
+            >
+              All ({history.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('active')}
+              className={`px-3 py-1 rounded-lg transition-all ${
+                filterMode === 'active' ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-600 hover:text-navy-900'
+              }`}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('completed')}
+              className={`px-3 py-1 rounded-lg transition-all ${
+                filterMode === 'completed' ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-600 hover:text-navy-900'
+              }`}
+            >
+              Completed
+            </button>
+          </div>
         </div>
 
         <div className="divide-y divide-slate-100">
-          {history.length === 0 ? (
+          {filteredHistory.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm">
-              No service requests found. Tap "New Voice SOS Request" to record your first problem!
+              No matching service requests found. Tap "New Voice SOS Request" to record your problem!
             </div>
           ) : (
-            history.map((req) => {
+            filteredHistory.map((req) => {
               const isComp = req.status === 'COMPLETED';
               const isEmg = req.urgency === 'Emergency';
 
@@ -160,6 +220,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       }`}>
                         {req.status}
                       </span>
+                      {req.images && req.images.length > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                          <Camera className="w-3 h-3" />
+                          {req.images.length} Photo{req.images.length > 1 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
 
                     <h3 className="text-sm font-bold text-navy-900 line-clamp-1">
@@ -261,6 +327,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {selectedModalRequest.assigned_professional.locality} • ★ {selectedModalRequest.assigned_professional.rating}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {/* Photos in Modal */}
+              {selectedModalRequest.images && selectedModalRequest.images.length > 0 && (
+                <div className="bg-slate-50 p-3 rounded-xl border space-y-2">
+                  <span className="text-slate-500 font-bold uppercase block text-[10px]">
+                    Attached Problem Photos ({selectedModalRequest.images.length})
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedModalRequest.images.map((img, i) => (
+                      <a
+                        key={i}
+                        href={img}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-14 h-14 rounded-lg overflow-hidden border border-slate-200"
+                      >
+                        <img src={img} alt="Attachment" className="w-full h-full object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                  {selectedModalRequest.image_analysis && (
+                    <p className="text-[11px] text-slate-600 bg-white p-2 rounded border">
+                      <strong>AI Visual Note:</strong> {selectedModalRequest.image_analysis}
+                    </p>
+                  )}
                 </div>
               )}
 
